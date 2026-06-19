@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>北海道自駕足跡</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+    
+    <style>
+        /* 日系極簡與北海道冰雪配色延伸 */
+        :root {
+            --ice-blue-light: #f0f6fa;
+            --ice-blue-dark: #2b5c8f;
+            --snow-white: #ffffff;
+        }
+        body {
+            background-color: var(--ice-blue-light);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+        /* 隱藏滾動條但保持功能 */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        /* 拖拽時的樣式 */
+        .sortable-ghost { opacity: 0.4; background: #e0eef7; }
+    </style>
+</head>
+<body class="max-w-md mx-auto min-h-screen shadow-2xl relative flex flex-col bg-[#f0f6fa]">
+
+    <div id="app" class="flex-1 flex flex-col pb-12">
+        
+        <div class="relative w-full h-[250px] overflow-hidden bg-[#2b5c8f]">
+            <img src="XXX" alt="Hokkaido Banner" class="w-full h-full object-cover">
+            
+            <div class="absolute bottom-6 right-4 flex space-x-2 bg-white/80 backdrop-blur-md p-1.5 rounded-full shadow-lg border border-white/40">
+                <button @click="currentTab = 'schedule'" :class="{'bg-[#2b5c8f] text-white': currentTab === 'schedule', 'text-gray-680': currentTab !== 'schedule'}" class="w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300">
+                    <i class="fa-solid fa-location-dot text-base"></i>
+                </button>
+                <button @click="currentTab = 'info'" :class="{'bg-[#2b5c8f] text-white': currentTab === 'info', 'text-gray-680': currentTab !== 'info'}" class="w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300">
+                    <i class="fa-solid fa-circle-info text-base"></i>
+                </button>
+                <button @click="currentTab = 'shopping'" :class="{'bg-[#2b5c8f] text-white': currentTab === 'shopping', 'text-gray-680': currentTab !== 'shopping'}" class="w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300">
+                    <i class="fa-solid fa-basket-shopping text-base"></i>
+                </button>
+                <button @click="currentTab = 'expenses'" :class="{'bg-[#2b5c8f] text-white': currentTab === 'expenses', 'text-gray-680': currentTab !== 'expenses'}" class="w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300">
+                    <i class="fa-solid fa-wallet text-base"></i>
+                </button>
+            </div>
+        </div>
+
+        <div class="flex-1 bg-[#f0f6fa] rounded-t-[28px] -mt-5 relative z-10 px-4 pt-5">
+            
+            <div v-if="currentTab === 'schedule'" class="space-y-4">
+                <div class="flex space-x-3 overflow-x-auto no-scrollbar py-2">
+                    <button v-for="(day, index) in daysList" :key="index" @click="selectedDayIndex = index"
+                        :class="{'bg-[#2b5c8f] text-white shadow-md': selectedDayIndex === index, 'bg-white text-gray-700': selectedDayIndex !== index}"
+                        class="flex flex-col items-center justify-center min-w-[65px] h-[75px] rounded-2xl transition-all duration-200 border border-blue-50">
+                        <span class="text-xs font-bold opacity-80 uppercase">{{ day.weekday }}</span>
+                        <span class="text-lg font-black mt-0.5">{{ day.dateNum }}</span>
+                    </button>
+                </div>
+
+                <div class="bg-white/70 backdrop-blur-sm rounded-2xl p-3.5 flex items-center justify-between border border-blue-100/50 shadow-sm">
+                    <div class="flex items-center space-x-3">
+                        <i :class="weatherData.icon" class="text-3xl text-sky-400"></i>
+                        <div>
+                            <div class="text-sm font-bold text-gray-800">今日北海道天氣</div>
+                            <div class="text-xs text-gray-500">體感溫度: {{ weatherData.feelsLike }}°C</div>
+                        </div>
+                    </div>
+                    <div class="text-2xl font-black text-[#2b5c8f]">{{ weatherData.temp }}°C</div>
+                </div>
+
+                <div id="schedule-list" class="space-y-3">
+                    <div v-for="(item, idx) in currentDaySchedules" :key="item.id" :data-id="item.id" class="relative">
+                        
+                        <div v-if="idx > 0" class="flex items-center justify-center my-2 text-xs text-slate-400 space-x-1.5 py-0.5">
+                            <i :class="getTransitIcon(item.transitType)"></i>
+                            <span>歷時約 {{ item.transitTime }} 分鐘</span>
+                        </div>
+
+                        <div v-if="item.category === '航班'" class="bg-gradient-to-br from-sky-600 to-indigo-700 text-white rounded-2xl p-4 shadow-md relative">
+                            <div class="flex justify-between items-center border-b border-white/20 pb-2 mb-2">
+                                <span class="text-xs bg-white/20 px-2 py-0.5 rounded-full font-bold">✈️ {{ item.category }}</span>
+                                <i class="fa-solid fa-bars text-white/40 drag-handle cursor-grab"></i>
+                            </div>
+                            <div class="flex justify-between items-center my-2">
+                                <div class="text-center">
+                                    <div class="text-xl font-bold">{{ item.flightFrom || 'TPE' }}</div>
+                                    <div class="text-xs opacity-70">{{ item.time || '起飛' }}</div>
+                                </div>
+                                <div class="flex flex-col items-center flex-1 mx-4">
+                                    <span class="text-[10px] opacity-60">{{ item.flightNum }}</span>
+                                    <div class="w-full border-t border-dashed border-white/50 my-1 relative">
+                                        <i class="fa-solid fa-plane absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-xs"></i>
+                                    </div>
+                                    <span class="text-[10px] opacity-60">班機編號</span>
+                                </div>
+                                <div class="text-center">
+                                    <div class="text-xl font-bold">{{ item.flightTo || 'CTS' }}</div>
+                                    <div class="text-xs opacity-70">抵達</div>
+                                </div>
+                            </div>
+                            <div class="text-xs opacity-90 mt-2 bg-black/10 p-2 rounded-lg" @click="openNav(item.name)">
+                                <i class="fa-solid fa-map-location-dot mr-1"></i> 目的地: {{ item.name }} (點擊導航)
+                            </div>
+                            <div class="absolute top-2 right-12 text-xs opacity-80" @click="editSchedule(item, idx)">
+                                <i class="fa-solid fa-pen-to-square p-2"></i>
+                            </div>
+                        </div>
+
+                        <div v-else class="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 flex flex-col justify-between relative">
+                            <div class="flex justify-between items-start">
+                                <div class="space-y-1 flex-1 pr-6">
+                                    <div class="flex items-center space-x-2">
+                                        <span :class="getCategoryBadgeClass(item.category)" class="text-[10px] px-2 py-0.5 rounded-md font-bold">
+                                            {{ item.category }}
+                                        </span>
+                                        <span class="text-xs text-gray-400"><i class="fa-regular fa-clock mr-1"></i>{{ item.time }}</span>
+                                    </div>
+                                    <h4 class="text-base font-bold text-gray-800 pt-1">{{ item.name }}</h4>
+                                </div>
+                                <div class="flex items-center space-x-2">
+                                    <button @click="editSchedule(item, idx)" class="text-gray-400 hover:text-gray-600 p-1">
+                                        <i class="fa-solid fa-pen-to-square"></i>
+                                    </button>
+                                    <i class="fa-solid fa-bars text-gray-300 drag-handle cursor-grab p-1"></i>
+                                </div>
+                            </div>
+
+                            <div class="mt-2 space-y-1 text-xs text-gray-500 border-t border-slate-50 pt-2">
+                                <p v-if="item.hours"><strong class="text-gray-700">營業時間：</strong> {{ item.hours }}</p>
+                                <p v-if="item.category === '景點' && item.ticket"><strong class="text-gray-700">門票資訊：</strong> {{ item.ticket }}</p>
+                                <p v-if="item.note"><strong class="text-gray-700">備註說明：</strong> {{ item.note }}</p>
+                            </div>
+
+                            <button @click="openNav(item.name)" class="mt-3 w-full bg-blue-50 hover:bg-blue-100 text-[#2b5c8f] text-xs font-bold py-2 rounded-xl flex items-center justify-center space-x-1 transition-colors">
+                                <i class="fa-solid fa-diamond-turn-right"></i>
+                                <span>導航至此地標</span>
+                            </button>
+                        </div>
+
+                    </div>
+                </div>
+
+                <button @click="openAddScheduleModal" class="fixed bottom-6 right-6 w-14 h-14 bg-[#2b5c8f] text-white rounded-full flex items-center justify-center shadow-xl z-30 hover:scale-105 active:scale-95 transition-transform">
+                    <i class="fa-solid fa-plus text-xl"></i>
+                </button>
+            </div>
+
+            <div v-if="currentTab === 'info'" class="space-y-4 pb-6">
+                <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
+                    <h3 class="text-sm font-bold text-gray-800 mb-3"><i class="fa-solid fa-money-bill-transfer mr-2 text-emerald-500"></i>即時日幣換算 (台幣)</h3>
+                    <div class="grid grid-cols-2 gap-3 items-center">
+                        <div>
+                            <label class="text-[10px] text-gray-400 block mb-1">輸入日圓 (JPY)</label>
+                            <input type="number" v-model="exchange.jpy" @input="calcToTwd" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:border-[#2b5c8f]">
+                        </div>
+                        <div>
+                            <label class="text-[10px] text-gray-400 block mb-1">換算台幣 (TWD)</label>
+                            <input type="number" v-model="exchange.twd" @input="calcToJpy" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:border-[#2b5c8f]">
+                        </div>
+                    </div>
+                    <p class="text-[10px] text-gray-400 mt-2 text-right">預設匯率基準：1 JPY = {{ exchange.rate }} TWD</p>
+                </div>
+
+                <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 space-y-3">
+                    <h3 class="text-sm font-bold text-gray-800 border-b pb-2"><i class="fa-solid fa-plane-departure mr-2 text-sky-500"></i>航班大綱</h3>
+                    <div class="text-xs space-y-2">
+                        <div class="bg-slate-50 p-2 rounded-xl"><span class="font-bold text-[#2b5c8f]">去程：</span>TPE 桃園 ➔ CTS 新千歲 | JL802 (09:30 - 14:15)</div>
+                        <div class="bg-slate-50 p-2 rounded-xl"><span class="font-bold text-[#2b5c8f]">回程：</span>CTS 新千歲 ➔ TPE 桃園 | JL801 (16:00 - 19:25)</div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 space-y-3">
+                    <h3 class="text-sm font-bold text-gray-800 border-b pb-2"><i class="fa-solid fa-hotel mr-2 text-amber-500"></i>預訂住宿</h3>
+                    <div v-for="hotel in infoDetails.hotels" :key="hotel.name" class="p-2 bg-slate-50 rounded-xl space-y-1 text-xs">
+                        <div class="font-bold text-gray-800 text-sm">{{ hotel.name }}</div>
+                        <div class="text-gray-500">電話: {{ hotel.phone }}</div>
+                        <div class="text-gray-500">地址: {{ hotel.address }}</div>
+                        <button @click="openNav(hotel.name)" class="text-[#2b5c8f] font-bold mt-1 inline-block"><i class="fa-solid fa-location-arrow mr-1"></i>點我導航開車</button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 space-y-2">
+                        <h3 class="text-xs font-bold text-gray-800"><i class="fa-solid fa-car mr-1 text-blue-500"></i> 租車資訊</h3>
+                        <p class="text-[11px] text-gray-500 leading-relaxed">TOYOTA Rent-a-Car<br>新千歲機場店<br>預約號: #HOK-99812</p>
+                        <button @click="openNav('TOYOTA Rent a Car New Chitose Airport')" class="text-xs text-[#2b5c8f] font-bold block pt-1">導航至店面 ➔</button>
+                    </div>
+                    <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 space-y-2">
+                        <h3 class="text-xs font-bold text-red-600"><i class="fa-solid fa-heart-pulse mr-1"></i> 緊急醫療</h3>
+                        <p class="text-[11px] text-gray-500 leading-relaxed">警察局報案：撥打 110<br>救護車/火警：撥打 119<br>外國人求助專線：<br>011-200-1111</p>
+                    </div>
+                </div>
+            </div>
+
+            <div v-if="currentTab === 'shopping'" class="space-y-3">
+                <div class="grid grid-cols-2 gap-3">
+                    <div v-for="item in shoppingList" :key="item.id" class="bg-white rounded-2xl overflow-hidden shadow-sm border border-slate-100 flex flex-col">
+                        <div class="w-full h-32 bg-slate-100 relative">
+                            <img v-if="item.image" :src="item.image" class="w-full h-full object-cover">
+                            <div v-else class="w-full h-full flex flex-col items-center justify-center text-slate-300">
+                                <i class="fa-solid fa-image text-2xl mb-1"></i>
+                                <span class="text-[10px]">暫無照片</span>
+                            </div>
+                        </div>
+                        <div class="p-2.5 flex-1 flex flex-col justify-between">
+                            <span class="text-xs font-bold text-gray-800 line-clamp-2">{{ item.name }}</span>
+                            <button @click="deleteShoppingItem(item.id)" class="text-right text-xs text-red-400 hover:text-red-600 mt-2">
+                                <i class="fa-solid fa-trash-can"></i> 刪除
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <button @click="openAddShoppingModal" class="fixed bottom-6 right-6 w-14 h-14 bg-[#2b5c8f] text-white rounded-full flex items-center justify-center shadow-xl z-30">
+                    <i class="fa-solid fa-plus text-xl"></i>
+                </button>
+            </div>
+
+            <div v-if="currentTab === 'expenses'" class="space-y-4 pb-6">
+                <div class="bg-gradient-to-r from-[#2b5c8f] to-slate-700 text-white rounded-2xl p-5 shadow-md">
+                    <span class="text-xs opacity-75 tracking-wider uppercase font-medium">總開銷結算 (日幣)</span>
+                    <h2 class="text-3xl font-black mt-1">¥ {{ totalExpenses.toLocaleString() }}</h2>
+                    <div class="text-[11px] opacity-60 mt-1">約折合新台幣 ≈ NT$ {{ Math.round(totalExpenses * exchange.rate).toLocaleString() }} 元</div>
+                </div>
+
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                    <div class="p-3 font-bold text-sm text-gray-700 border-b border-slate-50 bg-slate-50/50">開支消費明細</div>
+                    <div class="divide-y divide-slate-50 max-h-[380px] overflow-y-auto">
+                        <div v-for="exp in expenseList" :key="exp.id" class="p-3 flex items-center justify-between hover:bg-slate-50/40">
+                            <div class="flex items-center space-x-3">
+                                <span :class="getExpenseCategoryClass(exp.category)" class="w-8 h-8 rounded-full flex items-center justify-center text-xs">
+                                    <i :class="getExpenseIcon(exp.category)"></i>
+                                </span>
+                                <div>
+                                    <div class="text-xs font-bold text-gray-800">{{ exp.name }}</div>
+                                    <div class="text-[10px] text-gray-400">{{ exp.date }} · {{ exp.payMethod }}</div>
+                                </div>
+                            </div>
+                            <div class="text-right flex items-center space-x-2">
+                                <span class="text-xs font-bold text-gray-800">¥{{ exp.amount }}</span>
+                                <button @click="deleteExpense(exp.id)" class="text-slate-300 hover:text-red-500 text-xs p-1"><i class="fa-solid fa-xmark"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <button @click="openAddExpenseModal" class="fixed bottom-6 right-6 w-14 h-14 bg-[#2b5c8f] text-white rounded-full flex items-center justify-center shadow-xl z-30">
+                    <i class="fa-solid fa-plus text-xl"></i>
+                </button>
+            </div>
+
+        </div>
+
+        <div v-if="modals.schedule" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end justify-center animate-fade-in" @click.self="modals.schedule = false">
+            <div class="bg-white w-full max-w-md rounded-t-[24px] p-5 space-y-4 max-h-[90vh] overflow-y-auto">
+                <div class="flex justify-between items-center border-b pb-2">
+                    <h3 class="font-bold text-base text-gray-800">{{ isEditing ? '修改此行程資訊' : '新增每日行程' }}</h3>
+                    <button @click="modals.schedule = false" class="text-gray-400 text-lg"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                
+                <div class="space-y-3 text-xs">
+                    <div>
+                        <label class="block font-bold text-gray-600 mb-1">分類標籤</label>
+                        <select v-model="formSchedule.category" class="w-full bg-slate-50 border border-slate-200 p-2 rounded-xl focus:outline-none">
+                            <option>景點</option><option>住宿</option><option>美食</option><option>購物</option><option>航班</option><option>其他</option>
+                        </select>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="block font-bold text-gray-600 mb-1">出發時刻 (例如 09:30)</label>
+                            <input type="text" v-model="formSchedule.time" class="w-full bg-slate-50 border border-slate-200 p-2 rounded-xl">
+                        </div>
+                        <div>
+                            <label class="block font-bold text-gray-600 mb-1">交通工具(至下個點)</label>
+                            <select v-model="formSchedule.transitType" class="w-full bg-slate-50 border border-slate-200 p-2 rounded-xl">
+                                <option value="開車">🚗 開車自駕</option><option value="步行">🚶 步行走路</option><option value="大眾運輸">🚌 大眾捷運</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block font-bold text-gray-600 mb-1">交通耗時 (分鐘)</label>
+                        <input type="number" v-model="formSchedule.transitTime" class="w-full bg-slate-50 border border-slate-200 p-2 rounded-xl">
+                    </div>
+                    <div>
+                        <label class="block font-bold text-gray-600 mb-1">地標/景點名稱</label>
+                        <input type="text" v-model="formSchedule.name" class="w-full bg-slate-50 border border-slate-200 p-2 rounded-xl" placeholder="請輸入完整地名以利導航">
+                    </div>
+                    
+                    <div v-if="formSchedule.category === '航班'" class="grid grid-cols-3 gap-2 bg-blue-50/50 p-2 rounded-xl">
+                        <div><label class="block text-[10px]">起飛地</label><input type="text" v-model="formSchedule.flightFrom" class="w-full p-1 border rounded" placeholder="TPE"></div>
+                        <div><label class="block text-[10px]">目的地</label><input type="text" v-model="formSchedule.flightTo" class="w-full p-1 border rounded" placeholder="CTS"></div>
+                        <div><label class="block text-[10px]">班機號</label><input type="text" v-model="formSchedule.flightNum" class="w-full p-1 border rounded" placeholder="JL802"></div>
+                    </div>
+
+                    <div v-if="['景點','住宿','美食','購物'].includes(formSchedule.category)">
+                        <label class="block font-bold text-gray-600 mb-1">營業時間</label>
+                        <input type="text" v-model="formSchedule.hours" class="w-full bg-slate-50 border border-slate-200 p-2 rounded-xl" placeholder="如 09:00 - 17:00">
+                    </div>
+                    <div v-if="formSchedule.category === '景點'">
+                        <label class="block font-bold text-gray-600 mb-1">門票費用</label>
+                        <input type="text" v-model="formSchedule.ticket" class="w-full bg-slate-50 border border-slate-200 p-2 rounded-xl" placeholder="如 成人 ¥1000">
+                    </div>
+                    <div>
+                        <label class="block font-bold text-gray-600 mb-1">特色 & 備註</label>
+                        <textarea v-model="formSchedule.note" class="w-full bg-slate-50 border border-slate-200 p-2 rounded-xl h-16"></textarea>
+                    </div>
+                </div>
+
+                <div class="flex space-x-2 pt-2">
+                    <button v-if="isEditing" @click="confirmDeleteSchedule" class="flex-1 bg-red-50 text-red-600 font-bold py-2.5 rounded-xl border border-red-200 text-xs">
+                        <i class="fa-solid fa-trash-can mr-1"></i> 刪除此項
+                    </button>
+                    <button @click="saveSchedule" class="flex-[2] bg-[#2b5c8f] text-white font-bold py-2.5 rounded-xl text-xs shadow-md">
+                        確認保存
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div v-if="modals.shopping" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end justify-center" @click.self="modals.shopping = false">
+            <div class="bg-white w-full max-w-md rounded-t-[24px] p-5 space-y-4">
+                <div class="flex justify-between items-center border-b pb-2">
+                    <h3 class="font-bold text-base text-gray-800">添加欲購商品</h3>
+                    <button @click="modals.shopping = false" class="text-gray-400"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="space-y-3 text-xs">
+                    <div>
+                        <label class="block font-bold text-gray-600 mb-1">商品名稱</label>
+                        <input type="text" v-model="formShopping.name" class="w-full bg-slate-50 border border-slate-200 p-2 rounded-xl">
+                    </div>
+                    <div>
+                        <label class="block font-bold text-gray-600 mb-1">上傳實體照片 / 截圖</label>
+                        <input type="file" @change="handleImageUpload" accept="image/*" class="w-full text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-[#2b5c8f] hover:file:bg-blue-100">
+                    </div>
+                </div>
+                <button @click="saveShoppingItem" class="w-full bg-[#2b5c8f] text-white font-bold py-2.5 rounded-xl text-xs shadow-md mt-2">
+                    加入清單
+                </button>
+            </div>
+        </div>
+
+        <div v-if="modals.expense" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end justify-center" @click.self="modals.expense = false">
+            <div class="bg-white w-full max-w-md rounded-t-[24px] p-5 space-y-4">
+                <div class="flex justify-between items-center border-b pb-2">
+                    <h3 class="font-bold text-base text-gray-800">記帳一筆新支出</h3>
+                    <button @click="modals.expense = false" class="text-gray-400"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="space-y-3 text-xs">
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="block font-bold text-gray-600 mb-1">消費類別</label>
+                            <select v-model="formExpense.category" class="w-full bg-slate-50 border border-slate-200 p-2 rounded-xl">
+                                <option>交通</option><option>飲食</option><option>住宿</option><option>門票</option><option>購物</option><option>其他</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block font-bold text-gray-600 mb-1">日期時間</label>
+                            <input type="date" v-model="formExpense.date" class="w-full bg-slate-50 border border-slate-200 p-2 rounded-xl">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block font-bold text-gray-600 mb-1">支出名稱項目</label>
+                        <input type="text" v-model="formExpense.name" class="w-full bg-slate-50 border border-slate-200 p-2 rounded-xl" placeholder="例如: 湯咖哩、油錢">
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="block font-bold text-gray-600 mb-1">金額 (日幣 JPY)</label>
+                            <input type="number" v-model="formExpense.amount" class="w-full bg-slate-50 border border-slate-200 p-2 rounded-xl">
+                        </div>
+                        <div>
+                            <label class="block font-bold text-gray-600 mb-1">付款途徑</label>
+                            <select v-model="formExpense.payMethod" class="w-full bg-slate-50 border border-slate-200 p-2 rounded-xl">
+                                <option>現金</option><option>信用卡</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <button @click="saveExpense" class="w-full bg-[#2b5c8f] text-white font-bold py-2.5 rounded-xl text-xs shadow-md mt-2">
+                    保存開支
+                </button>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const { createApp, ref, computed, onMounted, nextTick, watch } = Vue;
+
+        createApp({
+            setup() {
+                // 基本導覽控制
+                const currentTab = ref('schedule');
+                const selectedDayIndex = ref(0);
+                
+                // 模擬日期清單 (Fri 6 開始橫向滑動)
+                const daysList = ref([
+                    { weekday: 'Fri', dateNum: '6' },
+                    { weekday: 'Sat', dateNum: '7' },
+                    { weekday: 'Sun', dateNum: '8' },
+                    { weekday: 'Mon', dateNum: '9' },
+                    { weekday: 'Tue', dateNum: '10' },
+                    { weekday: 'Wed', dateNum: '11' },
+                    { weekday: 'Thu', dateNum: '12' },
+                ]);
+
+                // 匯率工具
+                const exchange = ref({ rate: 0.21, jpy: 1000, twd: 210 });
+                const calcToTwd = () => { exchange.value.twd = Math.round(exchange.value.jpy * exchange.value.rate); };
+                const calcToJpy = () => { exchange.value.jpy = Math.round(exchange.value.twd / exchange.value.rate); };
+
+                // 擬真天氣資料 (自動抓取模擬)
+                const weatherData = ref({ temp: 16, feelsLike: 15, icon: 'fa-solid fa-cloud-sun' });
+
+                // 核心數據：每日行程資料庫
+                const allSchedules = ref({
+                    0: [
+                        { id: 's1', category: '航班', time: '09:30', name: '新千歲機場 (CTS)', flightFrom: 'TPE', flightTo: 'CTS', flightNum: 'JL802', transitType: '開車', transitTime: 45, note: '第一天降落後直奔取車點' },
+                        { id: 's2', category: '住宿', time: '16:00', name: '札幌大通公園大通拉索飯店', hours: 'Check-in 15:00後', note: '離電視塔很近，附近好停車' }
+                    ],
+                    1: [
+                        { id: 's3', category: '景點', time: '10:00', name: '小樽運河', hours: '24小時', ticket: '免費', transitType: '開車', transitTime: 30, note: '運河散步，下午去音樂盒堂' }
+                    ]
+                });
+
+                // 靜態資訊庫
+                const infoDetails = ref({
+                    hotels: [
+                        { name: '札幌大通公園大通拉索飯店', phone: '+81 11-200-0011', address: '北海道札幌市中央區大通西' },
+                        { name: '函館羅伊薩爾酒店', phone: '+81 138-22-0111', address: '北海道函館市若松町' }
+                    ]
+                });
+
+                // 購物清單庫
+                const shoppingList = ref([
+                    { id: 1, name: '六花亭 蘭姆葡萄奶油夾心餅乾', image: '' },
+                    { id: 2, name: '白色戀人巧克力 (36片裝)', image: '' }
+                ]);
+
+                // 記帳開支庫
+                const expenseList = ref([
+                    { id: 1, category: '飲食', name: '札幌拉麵共和國', date: '2026-06-06', amount: 4800, payMethod: '現金' },
+                    { id: 2, category: '交通', name: 'Toyota 租車加滿油', date: '2026-06-06', amount: 6500, payMethod: '信用卡' }
+                ]);
+
+                const totalExpenses = computed(() => {
+                    return expenseList.value.reduce((sum, curr) => sum + Number(curr.amount), 0);
+                });
+
+                // 彈出視窗控制旗標
+                const modals = ref({ schedule: false, shopping: false, expense: false });
+                const isEditing = ref(false);
+                let editingIndex = null;
+
+                // 表單雙向綁定暫存器
+                const formSchedule = ref({});
+                const formShopping = ref({ name: '', image: '' });
+                const formExpense = ref({});
+
+                const currentDaySchedules = computed(() => {
+                    return allSchedules.value[selectedDayIndex.value] || [];
+                });
+
+                // 地圖導航整合 (核心需求)
+                const openNav = (locationName) => {
+                    const encodedName = encodeURIComponent(locationName);
+                    // 同時兼容手機網頁直跳 Google Maps App 的原生協議
+                    window.open(`https://www.google.com/maps/search/?api=1&query=${encodedName}`, '_blank');
+                };
+
+                // 行程樣式計算
+                const getCategoryBadgeClass = (cat) => {
+                    const dict = {
+                        '景點': 'bg-emerald-50 text-emerald-600',
+                        '住宿': 'bg-amber-50 text-amber-600',
+                        '美食': 'bg-rose-50 text-rose-600',
+                        '購物': 'bg-purple-50 text-purple-600',
+                        '航班': 'bg-sky-50 text-sky-600',
+                    };
+                    return dict[cat] || 'bg-slate-100 text-slate-600';
+                };
+
+                const getTransitIcon = (type) => {
+                    if (type === '步行') return 'fa-solid fa-person-walking text-amber-500';
+                    if (type === '大眾運輸') return 'fa-solid fa-bus text-blue-500';
+                    return 'fa-solid fa-car text-sky-500';
+                };
+
+                // 行程增刪改
+                const openAddScheduleModal = () => {
+                    isEditing.value = false;
+                    const todayStr = new Date().toISOString().split('T')[0];
+                    formSchedule.value = {
+                        id: 's_' + Date.now(), category: '景點', time: '10:00', name: '',
+                        transitType: '開車', transitTime: 15, hours: '', ticket: '', note: ''
+                    };
+                    modals.value.schedule = true;
+                };
+
+                const editSchedule = (item, idx) => {
+                    isEditing.value = true;
+                    editingIndex = idx;
+                    formSchedule.value = { ...item };
+                    modals.value.schedule = true;
+                };
+
+                const saveSchedule = () => {
+                    if (!allSchedules.value[selectedDayIndex.value]) {
+                        allSchedules.value[selectedDayIndex.value] = [];
+                    }
+                    if (isEditing.value) {
+                        allSchedules.value[selectedDayIndex.value][editingIndex] = { ...formSchedule.value };
+                    } else {
+                        allSchedules.value[selectedDayIndex.value].push({ ...formSchedule.value });
+                    }
+                    modals.value.schedule = false;
+                };
+
+                const confirmDeleteSchedule = () => {
+                    if (confirm('確定要刪除這個行程嗎？此動作無法復原。')) {
+                        allSchedules.value[selectedDayIndex.value].splice(editingIndex, 1);
+                        modals.value.schedule = false;
+                    }
+                };
+
+                // 購物與圖片上傳處理 (Base64)
+                const openAddShoppingModal = () => {
+                    formShopping.value = { name: '', image: '' };
+                    modals.value.shopping = true;
+                };
+
+                const handleImageUpload = (e) => {
+                    const file = e.target.files[0];
+                    if (file) {
+                        const reader = new FileReader();
+                        reader.onload = (event) => {
+                            formShopping.value.image = event.target.result;
+                        };
+                        reader.readAsDataURL(file);
+                    }
+                };
+
+                const saveShoppingItem = () => {
+                    if (!formShopping.value.name) return;
+                    shoppingList.value.push({
+                        id: Date.now(),
+                        name: formShopping.value.name,
+                        image: formShopping.value.image
+                    });
+                    modals.value.shopping = false;
+                };
+
+                const deleteShoppingItem = (id) => {
+                    shoppingList.value = shoppingList.value.filter(item => item.id !== id);
+                };
+
+                // 記帳增刪
+                const openAddExpenseModal = () => {
+                    formExpense.value = {
+                        id: Date.now(), category: '飲食', name: '',
+                        date: new Date().toISOString().split('T')[0], amount: '', payMethod: '現金'
+                    };
+                    modals.value.expense = true;
+                };
+
+                const saveExpense = () => {
+                    if (!formExpense.value.name || !formExpense.value.amount) return;
+                    expenseList.value.unshift({ ...formExpense.value });
+                    modals.value.expense = false;
+                };
+
+                const deleteExpense = (id) => {
+                    expenseList.value = expenseList.value.filter(exp => exp.id !== id);
+                };
+
+                const getExpenseIcon = (cat) => {
+                    const icons = { '交通': 'fa-solid fa-car', '飲食': 'fa-solid fa-utensils', '住宿': 'fa-solid fa-bed', '門票': 'fa-solid fa-ticket', '購物': 'fa-solid fa-bag-shopping' };
+                    return icons[cat] || 'fa-solid fa-asterisk';
+                };
+
+                const getExpenseCategoryClass = (cat) => {
+                    const classes = { '交通': 'bg-blue-100 text-blue-600', '飲食': 'bg-rose-100 text-rose-600', '住宿': 'bg-amber-100 text-amber-600', '門票': 'bg-emerald-100 text-emerald-600', '購物': 'bg-purple-100 text-purple-600' };
+                    return classes[cat] || 'bg-slate-100 text-slate-600';
+                };
+
+                // 初始化拖拽排序組件 (SortableJS)
+                const initSortable = () => {
+                    const el = document.getElementById('schedule-list');
+                    if (!el) return;
+                    Sortable.create(el, {
+                        handle: '.drag-handle',
+                        animation: 200,
+                        ghostClass: 'sortable-ghost',
+                        onEnd: (evt) => {
+                            const daySchedules = allSchedules.value[selectedDayIndex.value];
+                            const movedItem = daySchedules.splice(evt.oldIndex, 1)[0];
+                            daySchedules.splice(evt.newIndex, 0, movedItem);
+                        }
+                    });
+                };
+
+                onMounted(() => {
+                    initSortable();
+                });
+
+                watch([currentTab, selectedDayIndex], () => {
+                    if (currentTab.value === 'schedule') {
+                        nextTick(() => initSortable());
+                    }
+                });
+
+                return {
+                    currentTab, selectedDayIndex, daysList, exchange, calcToTwd, calcToJpy, weatherData,
+                    infoDetails, shoppingList, expenseList, totalExpenses, modals, isEditing,
+                    formSchedule, formShopping, formExpense, currentDaySchedules, openNav,
+                    getCategoryBadgeClass, getTransitIcon, openAddScheduleModal, editSchedule,
+                    saveSchedule, confirmDeleteSchedule, openAddShoppingModal, handleImageUpload,
+                    saveShoppingItem, deleteShoppingItem, openAddExpenseModal, saveExpense, deleteExpense,
+                    getExpenseIcon, getExpenseCategoryClass
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
